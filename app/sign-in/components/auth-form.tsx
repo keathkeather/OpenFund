@@ -11,9 +11,11 @@ import {
   signInWithPopup,
 } from "firebase/auth";
 import { auth } from "@/app/firebase/config"; // Import Firebase auth instance
+import { useAuthStore } from "@/app/store/user";
 
 export default function AuthForm() {
   const router = useRouter();
+  const setUser = useAuthStore((s) => s.setUser);
   const [isSignUp, setIsSignUp] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,9 +40,24 @@ export default function AuthForm() {
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-      toast.success(`Welcome, ${user.displayName}!`);
-      router.push("/home"); 
+      const token = await result.user.getIdToken();
+
+      const r = await fetch("/services/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      if (!r.ok) throw new Error("Failed to set session");
+
+      setUser({
+        uid: result.user.uid,
+        email: result.user.email,
+        displayName: result.user.displayName,
+        photoURL: result.user.photoURL,
+      });
+
+      toast.success(`Welcome, ${result.user.displayName || "there"}!`);
+      router.push("/home");
     } catch (error: any) {
       toast.error(error.message || "Google sign-in failed.");
     }
@@ -56,31 +73,27 @@ export default function AuthForm() {
 
     try {
       if (isSignUp) {
-        toast.success("Sign up successful!");
-        setIsSignUp(false); 
+        toast.success("Sign up successful! Please sign in.");
+        setIsSignUp(false);
       } else {
-        const result = await signInWithEmailAndPassword(auth, email, password);
-        toast.success(`Welcome back, ${result.user?.email}!`);
+        const res = await fetch("/services/login-user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          toast.error(data.error || "Invalid email or password.");
+          return;
+        }
+
+        setUser(data.user);
+        toast.success(`Welcome back, ${data.user.email || "user"}!`);
         router.push("/home");
       }
-    } catch (error: any) {
-      // Handle Firebase Authentication errors
-      switch (error.code) {
-        case "auth/user-not-found":
-          toast.error("No user found with this email.");
-          break;
-        case "auth/wrong-password":
-          toast.error("Incorrect password. Please try again.");
-          break;
-        case "auth/invalid-email":
-          toast.error("Invalid email format.");
-          break;
-        case "auth/too-many-requests":
-          toast.error("Too many failed login attempts. Please try again later.");
-          break;
-        default:
-          toast.error("Invalid Email/Password. Please try again.");
-      }
+    } catch {
+      toast.error("Login failed. Please try again.");
     }
   };
 

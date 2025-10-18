@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -10,57 +10,92 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-// Mock authentication hook (replace with your actual auth logic)
-function useAuth() {
-  const [user, setUser] = React.useState<{
-    name: string;
-    email: string;
-    image?: string;
-  } | null>(null);
-
-  const signIn = () =>
-    setUser({ name: "Jane Doe", email: "jane@example.com", image: "" });
-  const signOut = () => setUser(null);
-
-  return { user, signIn, signOut };
-}
+import { useAuthStore } from "@/app/store/user";
 
 export default function NavigationBar() {
-  const { user, signIn, signOut } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
+
+  const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+  const clear = useAuthStore((s) => s.clear);
+
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Hydrate user from server cookie on first mount (e.g., page refresh)
+  React.useEffect(() => {
+    if (user) return;
+    (async () => {
+      try {
+        const res = await fetch("/services/me", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.user) setUser(data.user);
+      } catch {
+        // ignore
+      }
+    })();
+  }, [user, setUser]);
+
+  const handleSignOut = async () => {
+    try {
+      // Clear HttpOnly cookie on server
+      await fetch("/services/session", { method: "DELETE" }).catch(() => {});
+    } finally {
+      clear();
+      router.push("/sign-in");
+    }
+  };
+
+  if (!mounted) return null;
+
+  const hideSignIn = pathname === "/sign-in" || pathname === "/sign-up";
 
   return (
     <nav className="w-full flex items-center justify-between px-6 py-4 border-b bg-background">
       <Link href="/" className="font-bold text-lg">
         OpenFund
       </Link>
+
       <div className="flex items-center gap-4">
-        {/* Hide the "Sign In" button on the Sign Up page */}
-        {!user && pathname !== "/sign-up" && pathname !== "/sign-in" && (
+        {!user && !hideSignIn && (
           <Link href="/sign-in">
-            <Button variant={"default"}>Sign In</Button>
+            <Button variant="default">Sign In</Button>
           </Link>
         )}
+
         {user && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Avatar className="cursor-pointer">
-                <AvatarImage src={user.image} alt={user.name} />
-                <AvatarFallback>{user.name[0]}</AvatarFallback>
-              </Avatar>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <div className="px-3 py-2">
-                <div className="font-medium">{user.name}</div>
-                <div className="text-xs text-muted-foreground">
-                  {user.email}
+              <div className="flex items-center gap-2 cursor-pointer">
+                <Avatar>
+                  <AvatarImage src={user.photoURL ?? ""} alt={user.displayName ?? user.email ?? "User"} />
+                  <AvatarFallback>
+                    {(user.displayName || user.email || "U").charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="hidden sm:flex flex-col items-start">
+                  <span className="text-sm font-medium">
+                    {user.displayName || user.email || "User"}
+                  </span>
+                  <span className="text-xs text-muted-foreground truncate max-w-[160px]">
+                    {user.email}
+                  </span>
                 </div>
+              </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <div className="px-3 py-2">
+                <div className="font-medium">{user.displayName || "Account"}</div>
+                <div className="text-xs text-muted-foreground">{user.email}</div>
               </div>
               <DropdownMenuItem asChild>
                 <Link href="/profile">Profile</Link>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={signOut}>Sign Out</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleSignOut}>Sign Out</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         )}
