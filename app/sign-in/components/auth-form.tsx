@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Check } from "lucide-react";
 import {
   GoogleAuthProvider,
-  signInWithEmailAndPassword,
   signInWithPopup,
 } from "firebase/auth";
 import { auth } from "@/app/firebase/config"; // Import Firebase auth instance
@@ -58,8 +57,8 @@ export default function AuthForm() {
 
       toast.success(`Welcome, ${result.user.displayName || "there"}!`);
       router.push("/home");
-    } catch (error: any) {
-      toast.error(error.message || "Google sign-in failed.");
+    } catch (error: unknown) {
+      toast.error((error as Error).message || "Google sign-in failed.");
     }
   };
 

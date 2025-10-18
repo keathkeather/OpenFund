@@ -4,15 +4,21 @@ import { cookies } from "next/headers";
 const API_KEY =
   process.env.FIREBASE_WEB_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 
-const cookieStore = await cookies();
 export async function POST(req: Request) {
   try {
+    const cookieStore = await cookies();
     const { email, password } = await req.json();
     if (!email || !password) {
-      return NextResponse.json({ error: "Missing email or password" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing email or password" },
+        { status: 400 }
+      );
     }
     if (!API_KEY) {
-      return NextResponse.json({ error: "Missing Firebase API key" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Missing Firebase API key" },
+        { status: 500 }
+      );
     }
 
     const resp = await fetch(
@@ -55,6 +61,9 @@ export async function POST(req: Request) {
       },
     });
   } catch {
-    return NextResponse.json({ error: "Unexpected server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Unexpected server error" },
+      { status: 500 }
+    );
   }
 }
